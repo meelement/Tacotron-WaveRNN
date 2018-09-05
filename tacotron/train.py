@@ -93,7 +93,7 @@ def model_test_mode(args, feeder, hparams, global_step):
         return model
 
 
-def train(args, log_dir, hparams):
+def train(args, log_dir, input_path, params):
     save_dir = os.path.join(log_dir, 'taco_pretrained')
     plot_dir = os.path.join(log_dir, 'plots')
     wav_dir = os.path.join(log_dir, 'wavs')
@@ -112,7 +112,6 @@ def train(args, log_dir, hparams):
     os.makedirs(tensorboard_dir, exist_ok=True)
 
     checkpoint_path = os.path.join(save_dir, 'tacotron_model.ckpt')
-    input_path = os.path.join(args.base_dir, args.tacotron_input)
 
     if hparams.predict_linear:
         linear_dir = os.path.join(log_dir, 'linear-spectrograms')
@@ -310,4 +309,6 @@ def train(args, log_dir, hparams):
 
 
 def tacotron_train(args, log_dir, hparams):
-    return train(args, log_dir, hparams)
+    input_path = os.path.join(args.base_dir, 'training_data', 'train.txt')
+
+    return train(args, log_dir, input_path, params)

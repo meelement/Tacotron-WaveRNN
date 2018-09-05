@@ -27,7 +27,7 @@ def synthesize(args, input_dir, output_dir, checkpoint_path, hparams):
 
 
 def wavernn_synthesize(args, hparams, checkpoint_path):
-    input_dir = os.path.join(args.base_dir, args.mels_dir)
-    output_dir = os.path.join(args.base_dir, 'wavernn_' + args.output_dir)
+    input_dir = os.path.join(args.base_dir, 'tacotron_output', 'eval')
+    output_dir = os.path.join(args.base_dir, 'wavernn_output')
 
     synthesize(args, input_dir, output_dir, checkpoint_path, hparams)

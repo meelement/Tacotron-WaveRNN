@@ -108,7 +108,7 @@ def train(args, log_dir, input_path, hparams):
     criterion = nn.NLLLoss().to(device)
 
     # Train
-    for e in range(args.num_epochs):
+    for e in range(args.wavernn_train_epochs):
         running_loss = 0.
         start = time.time()
 
@@ -146,5 +146,7 @@ def train(args, log_dir, input_path, hparams):
         torch.save(['state_dict': model.state_dict(), 'global_step': step], checkpoint_path)
 
 
-def wavernn_train(args, log_dir, input_path, hparams):
+def wavernn_train(args, log_dir, hparams):
+    input_path = os.path.join(args.base_dir, 'tacotron_output', 'gta', 'map.txt')
+
     return train(args, log_dir, input_path, hparams)

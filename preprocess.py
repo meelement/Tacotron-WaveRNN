@@ -11,12 +11,12 @@ def write_metadata(metadata, out_dir):
     with open(os.path.join(out_dir, 'train.txt'), 'w', encoding='utf-8') as f:
         for m in metadata:
             f.write('|'.join([str(x) for x in m]) + '\n')
+
     mel_frames = sum([int(m[4]) for m in metadata])
     timesteps = sum([int(m[3]) for m in metadata])
-    sr = hparams.sample_rate
-    hours = timesteps / sr / 3600
-    print('Write {} utterances, {} mel frames, {} audio timesteps, ({:.2f} hours)'.format(
-        len(metadata), mel_frames, timesteps, hours))
+    hours = timesteps / hparams.sample_rate / 3600
+
+    print('Write {} utterances, {} mel frames, {} audio timesteps, ({:.2f} hours)'.format(len(metadata), mel_frames, timesteps, hours))
     print('Max input length (text chars): {}'.format(max(len(m[5]) for m in metadata)))
     print('Max mel frames length: {}'.format(max(int(m[4]) for m in metadata)))
     print('Max audio timesteps length: {}'.format(max(m[3] for m in metadata)))
@@ -60,7 +60,7 @@ def norm_data(args):
 
 def preprocess(args, hparams):
     input_dir = norm_data(args)
-    output_dir = os.path.join(args.base_dir, args.output)
+    output_dir = os.path.join(args.base_dir, 'training_data')
 
     mel_dir = os.path.join(output_dir, 'mels')
     wav_dir = os.path.join(output_dir, 'audio')
@@ -76,15 +76,13 @@ def preprocess(args, hparams):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--base_dir', default='')
-    parser.add_argument('--hparams', default='',
-                        help='Hyperparameter overrides as a comma-separated list of name=value pairs')
+    parser.add_argument('--hparams', default='', help='Hyperparameter overrides as a comma-separated list of name=value pairs')
     parser.add_argument('--dataset', default='LJSpeech-1.1')
     parser.add_argument('--language', default='en_US')
     parser.add_argument('--voice', default='female')
     parser.add_argument('--reader', default='mary_ann')
-    parser.add_argument('--merge_books', default='False')
+    parser.add_argument('--merge_books', type=bppl, default=False)
     parser.add_argument('--book', default='northandsouth')
-    parser.add_argument('--output', default='training_data')
     parser.add_argument('--n_jobs', type=int, default=cpu_count())
     args = parser.parse_args()
 

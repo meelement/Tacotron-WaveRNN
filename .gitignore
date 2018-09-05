@@ -103,7 +103,6 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-workdir
-tacotron2
-tacotron_output
-tacorn_output
+# output
+logs-*/
+*-ouput/
