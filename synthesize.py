@@ -1,80 +1,100 @@
 import argparse
 import os
-import torch
-import librosa
-import sys
-from collections import namedtuple
+from warnings import warn
 
-from wavernn.model import Model
-from wavernn.model import bits
-from wavernn.utils import *
-import config
-import tacorn.fileutils as fu
-
-
-sys.path.append('tacotron2')
-from tacotron2.synthesize import prepare_run
+import tensorflow as tf
+from hparams import hparams
+from infolog import log
 from tacotron.synthesize import tacotron_synthesize
+from wavernn.synthesize import wavernn_synthesize
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def prepare_run(args):
+    modified_hp = hparams.parse(args.hparams)
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+    run_name = args.name or args.tacotron_name or args.model
+    taco_checkpoint = os.path.join(args.base_dir, 'logs-' + run_name, 'taco_' + args.checkpoint)
+
+    run_name = args.name or args.wavenet_name or args.model
+    wave_checkpoint = os.path.join(args.base_dir, 'logs-' + run_name, 'wavernn_' + args.checkpoint)
+
+    return taco_checkpoint, wave_checkpoint, modified_hp
 
 
-def synthesize(sentences, output_dir):
-    # Tacotron first
-    args = namedtuple(
-        "tacoargs", "mode model checkpoint output_dir mels_dir hparams name".split())
-    args.mode = "eval"
-    args.model = "Tacotron-2"
-    args.checkpoint = "pretrained/"
-    args.output_dir = "output"
-    args.mels_dir = "tacotron_output/eval"
-    args.hparams = ''
-    args.name = "Tacotron-2"
-    taco_checkpoint, _, hparams = prepare_run(args)
-    taco_checkpoint = os.path.join("tacotron2", taco_checkpoint)
+def get_sentences(args):
+    if args.text_list != '':
+        with open(args.text_list, 'rb') as f:
+            sentences = list(map(lambda l: l.decode("utf-8")[:-1], f.readlines()))
+    else:
+        sentences = hparams.sentences
+    return sentences
+
+
+def synthesize(args, hparams, taco_checkpoint, wave_checkpoint, sentences):
+    log('Running End-to-End TTS Evaluation. Model: {}'.format(args.name or args.model))
+    log('Synthesizing mel-spectrograms from text..')
     tacotron_synthesize(args, hparams, taco_checkpoint, sentences)
 
-    # now WaveRNN
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(MODEL_PATH)
+    # Delete Tacotron model from graph
+    tf.reset_default_graph()
 
-    model = Model(rnn_dims=512, fc_dims=512, bits=bits, pad=2,
-                  upsample_factors=(5, 5, 11), feat_dims=80,
-                  compute_dims=128, res_out_dims=128, res_blocks=10).to(device)
+    log('Synthesizing audio from mel-spectrograms.. (This may take a while)')
+    wavernn_synthesize(args, hparams, wave_checkpoint)
 
-    print("Loading WaveRNN model from " + MODEL_PATH)
-    model.load_state_dict(torch.load(MODEL_PATH))
-
-    mels_paths = [f for f in sorted(
-        os.listdir(args.mels_dir)) if f.endswith(".npy")]
-    test_mels = [np.load(os.path.join(args.mels_dir, m)).T for m in mels_paths]
-
-    fu.ensure_dir(output_dir)
-
-    for i, mel in enumerate(test_mels):
-        print('\nGenerating: %i/%i' % (i+1, len(test_mels)))
-        model.generate(mel, output_dir + f'/{i}_generated.wav')
+    log('Tacotron-2 TTS synthesis complete!')
 
 
 def main():
-    # TODO: use custom workdir directory etc. instead of
-    # original tacotron and wavernn paths
+    accepted_modes = ['eval', 'synthesis', 'live']
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sentences_file', default=None,
-                        help='Input file containing sentences to synthesize')
-    parser.add_argument('--output_dir', default="synthesized_wavs",
-                        help='Output folder for synthesized wavs')
+    parser.add_argument('--base_dir', default='')
+    parser.add_argument('--checkpoint', default='pretrained', help='Path to model checkpoint')
+    parser.add_argument('--hparams', default='', help='Hyperparameter overrides as a comma-separated list of name=value pairs')
+    parser.add_argument('--name', help='Name of logging directory if the two models were trained together.')
+    parser.add_argument('--tacotron_name', help='Name of logging directory of Tacotron. If trained separately')
+    parser.add_argument('--wavernn_name', help='Name of logging directory of WaveNet. If trained separately')
+    parser.add_argument('--model', default='Tacotron-2')
+    parser.add_argument('--input_dir', default='training_data', help='folder to contain inputs sentences/targets')
+    parser.add_argument('--mels_dir', default='tacotron_output/eval', help='folder to contain mels to synthesize audio from using the Wavenet')
+    parser.add_argument('--output_dir', default='output', help='folder to contain synthesized mel spectrograms')
+    parser.add_argument('--mode', default='eval', help='mode of run: can be one of {}'.format(accepted_modes))
+    parser.add_argument('--GTA', default='True', help='Ground truth aligned synthesis, defaults to True, only considered in synthesis mode')
+    parser.add_argument('--text_list', default='', help='Text file contains list of texts to be synthesized. Valid if mode=eval')
+    parser.add_argument('--speaker_id', default=None, help='Defines the speakers ids to use when running standalone Wavenet on a folder of mels. this variable must be a comma-separated list of ids')
     args = parser.parse_args()
 
-    if args.sentences_file is None:
-        sentences = ["Hello, World!",
-                     "How much wood would a woodchuck chuck if a woodchuck could chuck wood?"]
-    else:
-        with open(args.sentences_file, 'rt') as fp:
-            sentences = fp.readlines()
+    accepted_models = ['Tacotron', 'WaveRNN', 'Tacotron-2']
 
-    synthesize(sentences, args.output_dir)
+    if args.model not in accepted_models:
+        raise ValueError('please enter a valid model to synthesize with: {}'.format(accepted_models))
+
+    if args.mode not in accepted_modes:
+        raise ValueError('accepted modes are: {}, found {}'.format(accepted_modes, args.mode))
+
+    if args.mode == 'live' and args.model == 'WaveRNN':
+        raise RuntimeError('WaveRNN vocoder cannot be tested live due to its slow generation. Live only works with Tacotron!')
+
+    if args.GTA not in ('True', 'False'):
+        raise ValueError('GTA option must be either True or False')
+
+    if args.model == 'Tacotron-2':
+        if args.mode == 'live':
+            warn('Requested a live evaluation with Tacotron-2, WaveRNN will not be used!')
+        if args.mode == 'synthesis':
+            raise ValueError('I don\'t recommend running WaveRNN on entire dataset.. The world might end before the synthesis :) (only eval allowed)')
+
+    taco_checkpoint, wave_checkpoint, hparams = prepare_run(args)
+    sentences = get_sentences(args)
+
+    if args.model == 'Tacotron':
+        tacotron_synthesize(args, hparams, taco_checkpoint, sentences)
+    elif args.model == 'WaveRNN':
+        wavernn_synthesize(args, hparams, wave_checkpoint)
+    elif args.model == 'Tacotron-2':
+        synthesize(args, hparams, taco_checkpoint, wave_checkpoint, sentences)
+    else:
+        raise ValueError('Model provided {} unknown! {}'.format(args.model, accepted_models))
 
 
 if __name__ == '__main__':

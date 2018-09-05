@@ -1,20 +1,11 @@
-import matplotlib.pyplot as plt
-import math
-import pickle
-import os
 import numpy as np
 import torch
-from torch.autograd import Variable
-from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from .utils import *
-from .dsp import *
+from infolog import log
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-bits = 9
 
 class ResBlock(nn.Module):
     def __init__(self, dims):
@@ -151,7 +142,7 @@ class Model(nn.Module):
         mels, aux = self.upsample(mels)
         return mels, aux
 
-    def generate(self, mels, save_path):
+    def generate(self, mels, save_path, hparams):
         self.eval()
         output = []
         rnn1 = self.get_gru_cell(self.rnn1)
@@ -204,10 +195,9 @@ class Model(nn.Module):
                 x = torch.FloatTensor([[sample]]).to(device)
                 if i % 100 == 0:
                     speed = int((i + 1) / (time.time() - start))
-                    display('%i/%i -- Speed: %i samples/sec',
-                            (i + 1, seq_len, speed))
+                    log('%i/%i -- Speed: %i samples/sec' % (i + 1, seq_len, speed))
         output = torch.stack(output).cpu().numpy()
-        librosa.output.write_wav(save_path, output, sample_rate)
+        librosa.output.write_wav(save_path, output, hparams.sample_rate)
         self.train()
         return output
 
@@ -218,3 +208,8 @@ class Model(nn.Module):
         gru_cell.bias_hh.data = gru.bias_hh_l0.data
         gru_cell.bias_ih.data = gru.bias_ih_l0.data
         return gru_cell
+
+    def num_params(model):
+        parameters = filter(lambda p: p.requires_grad, model.parameters())
+        parameters = sum([np.prod(p.size()) for p in parameters])
+        log('Trainable Parameters: %i' % parameters)
