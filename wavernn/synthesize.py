@@ -1,29 +1,31 @@
 import os
 
+import numpy as np
 import torch
 from infolog import log
 from wavernn.model import Model
-from wavernn.train import bits
+from wavernn.train import _bits
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def synthesize(args, input_dir, output_dir, checkpoint_path, hparams):
     # Initialize Model
-    model = Model(rnn_dims=512, fc_dims=512, bits=bits, pad=2,
+    model = Model(rnn_dims=512, fc_dims=512, bits=_bits, pad=2,
                   upsample_factors=(5, 5, 11), feat_dims=80,
                   compute_dims=128, res_out_dims=128, res_blocks=10).to(device)
 
     # Load Model
-    model.load_state_dict(torch.load(checkpoint_path))
-    print('Loading WaveRNN model from {}'.format(checkpoint_path))
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['state_dict'])
+    log('Loading WaveRNN model from {}'.format(checkpoint_path))
 
     mels_paths = [f for f in sorted(os.listdir(input_dir)) if f.endswith(".npy")]
-    test_mels = [np.load(os.path.join(input_dir, m)).T for m in mels_paths]
+    mels = [np.load(os.path.join(input_dir, m)).T for m in mels_paths]
 
-    for i, mel in enumerate(test_mels):
-        print('\nGenerating: %i/%i' % (i + 1, len(test_mels)))
-        model.generate(mel, output_dir + f'/{i}_generated.wav', hparams)
+    for i, mel in enumerate(mels):
+        log('\nGenerating: %i/%i' % (i + 1, len(mels)))
+        model.generate(mel, f'{output_dir}/{i}_generated.wav', sr=hparams.sample_rate)
 
 
 def wavernn_synthesize(args, hparams, checkpoint_path):

@@ -5,6 +5,7 @@ from multiprocessing import cpu_count
 from datasets import preprocessor
 from hparams import hparams
 from tqdm import tqdm
+from wavernn.preprocess import wavernn_preprocess
 
 
 def write_metadata(metadata, out_dir):
@@ -77,18 +78,27 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--base_dir', default='')
     parser.add_argument('--hparams', default='', help='Hyperparameter overrides as a comma-separated list of name=value pairs')
+    parser.add_argument('--model', default='Tacotron')
     parser.add_argument('--dataset', default='LJSpeech-1.1')
     parser.add_argument('--language', default='en_US')
     parser.add_argument('--voice', default='female')
     parser.add_argument('--reader', default='mary_ann')
-    parser.add_argument('--merge_books', type=bppl, default=False)
+    parser.add_argument('--merge_books', type=bool, default=False)
     parser.add_argument('--book', default='northandsouth')
     parser.add_argument('--n_jobs', type=int, default=cpu_count())
     args = parser.parse_args()
 
+    accepted_models = ['Tacotron', 'WaveRNN']
+
+    if args.model not in accepted_models:
+        raise ValueError('please enter a valid model to train: {}'.format(accepted_models))
+
     modified_hp = hparams.parse(args.hparams)
 
-    preprocess(args, modified_hp)
+    if args.model == 'Tacotron':
+        preprocess(args, modified_hp)
+    else:
+        wavernn_preprocess(args, modified_hp)
 
 
 if __name__ == '__main__':

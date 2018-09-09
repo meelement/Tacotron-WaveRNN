@@ -1,35 +1,41 @@
 import os
+import pickle
+import time
 
 import numpy as np
 import torch
 import torch.nn as nn
 from datasets.audio import save_wavernn_wav
+from hparams import hparams_debug_string
 from infolog import log
 from torch import optim
 from torch.utils.data import DataLoader, Dataset
 from wavernn.model import Model
 
-bits = 9
+_bits = 9
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class AudiobookDataset(Dataset):
-    def __init__(self, metadata, path):
-        self.metadata = metadata
+    def __init__(self, ids, path):
+        self.ids = ids
         self.path = path
 
     def __getitem__(self, index):
-        file_set = self.metadata[index]
-        x = np.load(f'{file_set[0]}')
-        m = np.load(f'{file_set[2]}')
+        id = self.ids[index]
+        m = np.load(f'{self.path}/mels/{id}.npy')
+        x = np.load(f'{self.path}/quant/{id}.npy')
         return m, x
 
     def __len__(self):
-        return len(self.metadata)
+        return len(self.ids)
 
 
 def collate(batch):
     pad = 2
+    hop_length = 275
+    seq_len = hop_length * 5
     mel_win = seq_len // hop_length + 2 * pad
 
     max_offsets = [x[0].shape[-1] - (mel_win + 2 * pad) for x in batch]
@@ -45,27 +51,27 @@ def collate(batch):
     mels = torch.FloatTensor(mels)
     coarse = torch.LongTensor(coarse)
 
-    x_input = 2 * coarse[:, :seq_len].float() / (2**bits - 1.) - 1.
+    x_input = 2 * coarse[:, :seq_len].float() / (2**_bits - 1.) - 1.
 
     y_coarse = coarse[:, 1:]
 
     return x_input, mels, y_coarse
 
 
-def eval(step, ouput_dir, metadata, hparams, samples=3):
-    file_list = metadata[:samples]
-    gts = [np.load(f'{file_set[0]}') for file_set in file_list]
-    mels = [np.load(f'{file_set[2]}') for file_set in file_list]
+def test_generate(args, model, step, ouput_dir, hparams, samples=3):
+    test_dir = os.path.join(args.base_dir, 'tacotron_output', 'eval')
 
-    for i, (gt, mel) in enumerate(zip(gts, mels)):
+    mels_paths = [f for f in sorted(os.listdir(test_dir)) if f.endswith(".npy")]
+    mels = [np.load(os.path.join(test_dir, m)).T for m in mels_paths]
+
+    k = step // 1000
+
+    for i, mel in enumerate(mels):
         log('Generating: %i/%i' % (i + 1, samples))
-
-        gt = 2 * gt.astype(np.float32) / (2**bits - 1.) - 1.
-
-        save_wavernn_wav(f'{ouput_dir}{k}k_steps_{i}_target.wav', gt, sr=hparams.sample_rate)
+        model.generate(mel, f'{ouput_dir}/{k}k_steps_{i}.wav', sr=hparams.sample_rate)
 
 
-def train(args, log_dir, input_path, hparams):
+def train(args, log_dir, input_dir, hparams):
     save_dir = os.path.join(log_dir, 'wavernn_pretrained')
     eval_dir = os.path.join(log_dir, 'eval-dir')
     eval_wav_dir = os.path.join(eval_dir, 'wavs')
@@ -76,34 +82,35 @@ def train(args, log_dir, input_path, hparams):
     checkpoint_path = os.path.join(save_dir, 'wavernn_model.pyt')
 
     log('Checkpoint path: {}'.format(checkpoint_path))
-    log('Loading training data from: {}'.format(input_path))
+    log('Loading training data from: {}'.format(input_dir))
     log('Using model: {}'.format(args.model))
+
     log(hparams_debug_string())
 
-    with open(input_path, 'r') as f:
-        metadata = [line.strip().split('|') for line in f]
+    with open(f'{input_dir}/dataset_ids.pkl', 'rb') as f:
+        dataset_ids = pickle.load(f)
 
-    dataset = AudiobookDataset(metadata, input_path)
+    dataset = AudiobookDataset(dataset_ids, input_dir)
     log('dataset length: %i' % len(dataset))
 
-    data_loader = DataLoader(dataset, collate_fn=collate, batch_size=32,
-                             num_workers=2, shuffle=True, pin_memory=True)
+    data_loader = DataLoader(dataset, collate_fn=collate, batch_size=32, shuffle=True)
 
-    model = Model(rnn_dims=512, fc_dims=512, bits=bits, pad=2,
+    model = Model(rnn_dims=512, fc_dims=512, bits=_bits, pad=2,
                   upsample_factors=(5, 5, 11), feat_dims=80,
                   compute_dims=128, res_out_dims=128, res_blocks=10).to(device)
 
     if not os.path.exists(checkpoint_path):
         log('Create new model!!!', slack=True)
-        torch.save(['state_dict': model.state_dict() 'global_step': 0], checkpoint_path)
+        torch.save({'state_dict': model.state_dict(), 'global_step': 0}, checkpoint_path)
     else:
         log('Loading model from {}'.format(checkpoint_path), slack=True)
 
     checkpoint = torch.load(checkpoint_path)
-    step = checkpoint['global_step']
     model.load_state_dict(checkpoint['state_dict'])
+    step = checkpoint['global_step']
+    log('starting from step: ' + str(step), slack=True)
 
-    optimiser = optim.Adam(model.parameters())
+    optimiser = optim.Adam(model.parameters(), lr=1e-4)
 
     criterion = nn.NLLLoss().to(device)
 
@@ -113,14 +120,14 @@ def train(args, log_dir, input_path, hparams):
         start = time.time()
 
         for i, (x, m, y) in enumerate(data_loader):
-            x, m, y = x.to(device), m.to(device), y.to(device)
+            optimiser.zero_grad()
 
+            x, m, y = x.to(device), m.to(device), y.to(device)
             y_hat = model(x, m)
             y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
             y = y.unsqueeze(-1)
-            loss = criterion(y_hat, y)
 
-            optimiser.zero_grad()
+            loss = criterion(y_hat, y)
             loss.backward()
             optimiser.step()
 
@@ -141,12 +148,14 @@ def train(args, log_dir, input_path, hparams):
 
             if step % args.eval_interval == 0:
                 log('Running evaluation at step {}'.format(step))
-                eval(step, eval_wav_dir, metadata, hparams)
+                test_generate(args, model, step, eval_wav_dir, hparams)
 
-        torch.save(['state_dict': model.state_dict(), 'global_step': step], checkpoint_path)
+            if step % args.checkpoint_interval == 0:
+                log('Saving model at step {}'.format(step))
+                torch.save({'state_dict': model.state_dict(), 'global_step': step}, checkpoint_path)
 
 
 def wavernn_train(args, log_dir, hparams):
-    input_path = os.path.join(args.base_dir, 'tacotron_output', 'gta', 'map.txt')
+    input_dir = os.path.join(args.base_dir, 'wavernn_data')
 
-    return train(args, log_dir, input_path, hparams)
+    train(args, log_dir, input_dir, hparams)

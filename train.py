@@ -8,13 +8,16 @@ from hparams import hparams
 from infolog import log
 from tacotron.synthesize import tacotron_synthesize
 from tacotron.train import tacotron_train
+from wavernn.preprocess import wavernn_preprocess
 from wavernn.train import wavernn_train
+
+from synthesize import get_sentences
 
 log = infolog.log
 
 
 def save_seq(file, sequence):
-    sequence = [for s in sequence]
+    sequence = [s for s in sequence]
     with open(file, 'w') as f:
         f.write('|'.join(sequence))
 
@@ -64,7 +67,10 @@ def train(args, log_dir, hparams):
         log('\n#############################################################\n')
         log('Tacotron GTA Synthesis\n')
         log('###########################################################\n')
+        args.mode = 'synthesis'
         tacotron_synthesize(args, hparams, checkpoint)
+        args.mode = 'eval'
+        tacotron_synthesize(args, hparams, checkpoint, get_sentences(args))
         GTA_state = 1
         save_seq(state_file, [taco_state, GTA_state, wave_state])
 
@@ -72,6 +78,7 @@ def train(args, log_dir, hparams):
         log('\n#############################################################\n')
         log('WaveRNN Train\n')
         log('###########################################################\n')
+        wavernn_preprocess(args, hparams)
         wavernn_train(args, log_dir, hparams)
         wave_state = 1
         save_seq(state_file, [taco_state, GTA_state, wave_state])
@@ -93,6 +100,7 @@ def main():
     parser.add_argument('--eval_interval', type=int, default=10000, help='Steps between eval on test data')
     parser.add_argument('--tacotron_train_steps', type=int, default=120000, help='total number of tacotron training steps')
     parser.add_argument('--wavernn_train_epochs', type=int, default=500, help='total number of wavenet training epochs')
+    parser.add_argument('--text_list', default='', help='Text file contains list of texts to be synthesized. Valid if mode=eval')
     parser.add_argument('--slack_url', default=None, help='slack webhook notification destination link')
     args = parser.parse_args()
 
