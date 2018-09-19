@@ -6,12 +6,11 @@ import infolog
 import tensorflow as tf
 from hparams import hparams
 from infolog import log
+from synthesize import get_sentences
 from tacotron.synthesize import tacotron_synthesize
 from tacotron.train import tacotron_train
 from wavernn.preprocess import wavernn_preprocess
 from wavernn.train import wavernn_train
-
-from synthesize import get_sentences
 
 log = infolog.log
 
@@ -53,11 +52,15 @@ def train(args, log_dir, hparams):
         log('Tacotron Train\n')
         log('###########################################################\n')
         checkpoint = tacotron_train(args, log_dir, hparams)
+
         tf.reset_default_graph()
-        # Sleep 1 second to let previous graph close and avoid error messages while synthesis
-        sleep(1)
+
+        # Sleep 1/2 second to let previous graph close and avoid error messages while synthesis
+        sleep(0.5)
+
         if checkpoint is None:
             raise('Error occured while training Tacotron, Exiting!')
+
         taco_state = 1
         save_seq(state_file, [taco_state, GTA_state, wave_state])
     else:
@@ -69,8 +72,15 @@ def train(args, log_dir, hparams):
         log('###########################################################\n')
         args.mode = 'synthesis'
         tacotron_synthesize(args, hparams, checkpoint)
+
         args.mode = 'eval'
         tacotron_synthesize(args, hparams, checkpoint, get_sentences(args))
+
+        tf.reset_default_graph()
+
+        # Sleep 1/2 second to let previous graph close and avoid error messages while Wavenet is training
+        sleep(0.5)
+
         GTA_state = 1
         save_seq(state_file, [taco_state, GTA_state, wave_state])
 
@@ -79,7 +89,9 @@ def train(args, log_dir, hparams):
         log('WaveRNN Train\n')
         log('###########################################################\n')
         wavernn_preprocess(args, hparams)
+
         wavernn_train(args, log_dir, hparams)
+
         wave_state = 1
         save_seq(state_file, [taco_state, GTA_state, wave_state])
 
@@ -98,7 +110,7 @@ def main():
     parser.add_argument('--summary_interval', type=int, default=250, help='Steps between running summary ops')
     parser.add_argument('--checkpoint_interval', type=int, default=5000, help='Steps between writing checkpoints')
     parser.add_argument('--eval_interval', type=int, default=10000, help='Steps between eval on test data')
-    parser.add_argument('--tacotron_train_steps', type=int, default=120000, help='total number of tacotron training steps')
+    parser.add_argument('--tacotron_train_steps', type=int, default=100000, help='total number of tacotron training steps')
     parser.add_argument('--wavernn_train_epochs', type=int, default=500, help='total number of wavenet training epochs')
     parser.add_argument('--text_list', default='', help='Text file contains list of texts to be synthesized. Valid if mode=eval')
     parser.add_argument('--slack_url', default=None, help='slack webhook notification destination link')

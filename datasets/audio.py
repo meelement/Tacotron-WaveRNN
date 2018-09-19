@@ -19,6 +19,18 @@ def save_wavernn_wav(wav, path, sr):
     librosa.output.write_wav(path, wav, sr=sr)
 
 
+def preemphasis(wav, k, preemphasize=True):
+    if preemphasize:
+        return signal.lfilter([1, -k], [1], wav)
+    return wav
+
+
+def inv_preemphasis(wav, k, inv_preemphasize=True):
+    if inv_preemphasize:
+        return signal.lfilter([1], [1, -k], wav)
+    return wav
+
+
 def start_and_end_indices(quantized, silence_threshold=2):
     for start in range(quantized.size):
         if abs(quantized[start] - 127) > silence_threshold:
@@ -49,7 +61,7 @@ def get_hop_size(hparams):
 
 
 def linearspectrogram(wav, hparams):
-    D = _stft(wav, hparams)
+    D = _stft(preemphasis(wav, hparams.preemphasis, hparams.preemphasize), hparams)
     S = _amp_to_db(np.abs(D), hparams) - hparams.ref_level_db
 
     if hparams.signal_normalization:
@@ -58,7 +70,7 @@ def linearspectrogram(wav, hparams):
 
 
 def melspectrogram(wav, hparams):
-    D = _stft(wav, hparams)
+    D = _stft(preemphasis(wav, hparams.preemphasis, hparams.preemphasize), hparams)
     S = _amp_to_db(_linear_to_mel(np.abs(D), hparams), hparams) - hparams.ref_level_db
 
     if hparams.signal_normalization:
@@ -79,9 +91,9 @@ def inv_linear_spectrogram(linear_spectrogram, hparams):
         processor = _lws_processor(hparams)
         D = processor.run_lws(S.astype(np.float64).T ** hparams.power)
         y = processor.istft(D).astype(np.float32)
-        return y
+        return inv_preemphasis(y, hparams.preemphasis, hparams.preemphasize)
     else:
-        return _griffin_lim(S ** hparams.power, hparams)
+        return inv_preemphasis(_griffin_lim(S ** hparams.power, hparams), hparams.preemphasis, hparams.preemphasize)
 
 
 def inv_mel_spectrogram(mel_spectrogram, hparams):
@@ -97,9 +109,9 @@ def inv_mel_spectrogram(mel_spectrogram, hparams):
         processor = _lws_processor(hparams)
         D = processor.run_lws(S.astype(np.float64).T ** hparams.power)
         y = processor.istft(D).astype(np.float32)
-        return y
+        return inv_preemphasis(y, hparams.preemphasis, hparams.preemphasize)
     else:
-        return _griffin_lim(S ** hparams.power, hparams)
+        return inv_preemphasis(_griffin_lim(S ** hparams.power, hparams), hparams.preemphasis, hparams.preemphasize)
 
 
 def _lws_processor(hparams):
@@ -150,6 +162,12 @@ def pad_lr(x, fsize, fshift):
     T = len(x) + 2 * pad
     r = (M - 1) * fshift + fsize - T
     return pad, pad + r
+
+
+def librosa_pad_lr(x, fsize, fshift):
+    '''compute right padding (final frame)
+    '''
+    return int(fsize // 2)
 
 
 # Conversions

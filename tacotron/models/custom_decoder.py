@@ -2,8 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 import collections
 
-from pkg_resources import parse_version
-
 import tensorflow as tf
 from tacotron.models.helpers import TacoTestHelper, TacoTrainingHelper
 from tensorflow.contrib.seq2seq.python.ops import decoder
@@ -42,11 +40,8 @@ class CustomDecoder(decoder.Decoder):
         Raises:
                 TypeError: if `cell`, `helper` or `output_layer` have an incorrect type.
         """
-        if (parse_version(tf.__version__) >= parse_version('1.10')):
-            rnn_cell_impl.assert_like_rnncell(type(cell), cell)
-        else:
-            if not rnn_cell_impl._like_rnncell(cell):  # pylint: disable=protected-access
-                raise TypeError("cell must be an RNNCell, received: %s" % type(cell))
+        rnn_cell_impl.assert_like_rnncell(type(cell), cell)
+
         if not isinstance(helper, helper_py.Helper):
             raise TypeError("helper must be a Helper, received: %s" % type(helper))
         if (output_layer is not None
