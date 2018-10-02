@@ -93,7 +93,7 @@ def model_test_mode(args, feeder, hparams, global_step):
         return model
 
 
-def train(args, log_dir, input_path, params):
+def train(args, log_dir, input_path, hparams):
     save_dir = os.path.join(log_dir, 'taco_pretrained')
     plot_dir = os.path.join(log_dir, 'plots')
     wav_dir = os.path.join(log_dir, 'wavs')
@@ -179,12 +179,11 @@ def train(args, log_dir, input_path, params):
                 step, loss, opt = sess.run([global_step, model.loss, model.optimize])
                 time_window.append(time.time() - start_time)
                 loss_window.append(loss)
-                message = 'Step {:7d} [{:.3f} sec/step, loss={:.5f}, avg_loss={:.5f}]'.format(
-                    step, time_window.average, loss, loss_window.average)
+                message = 'Step {:7d} [{:.3f} sec/step, loss={:.5f}, avg_loss={:.5f}]'.format(step, time_window.average, loss, loss_window.average)
                 log(message, end='\r', slack=(step % args.checkpoint_interval == 0))
 
                 if loss > 100 or np.isnan(loss):
-                    log('Loss exploded to {:.5f} at step {}'.format(loss, step))
+                    log('\nLoss exploded to {:.5f} at step {}'.format(loss, step))
                     raise Exception('Loss exploded')
 
                 if step % args.summary_interval == 0:
@@ -192,7 +191,6 @@ def train(args, log_dir, input_path, params):
                     summary_writer.add_summary(sess.run(stats), step)
 
                 if step % args.eval_interval == 0:
-                    # Run eval and save eval stats
                     log('\nRunning evaluation at step {}'.format(step))
 
                     eval_losses = []
@@ -217,7 +215,7 @@ def train(args, log_dir, input_path, params):
                         linear_loss = sum(linear_losses) / len(linear_losses)
 
                         wav = audio.inv_linear_spectrogram(lin_p.T, hparams)
-                        audio.save_wav(wav, os.path.join(eval_wav_dir, 'step-{}-eval-waveform-linear.wav'.format(step)), sr=hparams.sample_rate)
+                        audio.save_wav(wav, os.path.join(eval_wav_dir, 'step-{}-eval-wave-from-linear.wav'.format(step)), hparams.sample_rate)
                     else:
                         for i in tqdm(range(feeder.test_steps)):
                             eloss, before_loss, after_loss, stop_token_loss, mel_p, mel_t, t_len, align = sess.run(
@@ -237,7 +235,7 @@ def train(args, log_dir, input_path, params):
                     log('Saving eval log to {}..'.format(eval_dir))
                     # Save some log to monitor model improvement on same unseen sequence
                     wav = audio.inv_mel_spectrogram(mel_p.T, hparams)
-                    audio.save_wav(wav, os.path.join(eval_wav_dir, 'step-{}-eval-waveform-mel.wav'.format(step)), sr=hparams.sample_rate)
+                    audio.save_wav(wav, os.path.join(eval_wav_dir, 'step-{}-eval-wave-from-mel.wav'.format(step)), hparams.sample_rate)
 
                     plot.plot_alignment(align, os.path.join(eval_plot_dir, 'step-{}-eval-align.png'.format(step)),
                                         title='{}, {}, step={}, loss={:.5f}'.format(args.model, time_string(), step, eval_loss),
@@ -277,7 +275,7 @@ def train(args, log_dir, input_path, params):
 
                         # save griffin lim inverted wav for debug (linear -> wav)
                         wav = audio.inv_linear_spectrogram(linear_prediction.T, hparams)
-                        audio.save_wav(wav, os.path.join(wav_dir, 'step-{}-wave-from-linear.wav'.format(step)), sr=hparams.sample_rate)
+                        audio.save_wav(wav, os.path.join(wav_dir, 'step-{}-wave-from-linear.wav'.format(step)), hparams.sample_rate)
 
                         # Save real and predicted linear-spectrogram plot to disk (control purposes)
                         plot.plot_spectrogram(linear_prediction, os.path.join(plot_dir, 'step-{}-linear-spectrogram.png'.format(step)),
@@ -298,7 +296,7 @@ def train(args, log_dir, input_path, params):
 
                     # save griffin lim inverted wav for debug (mel -> wav)
                     wav = audio.inv_mel_spectrogram(mel_prediction.T, hparams)
-                    audio.save_wav(wav, os.path.join(wav_dir, 'step-{}-wavefrom-mel.wav'.format(step)), sr=hparams.sample_rate)
+                    audio.save_wav(wav, os.path.join(wav_dir, 'step-{}-wave-from-mel.wav'.format(step)), hparams.sample_rate)
 
                     # save alignment plot to disk (control purposes)
                     plot.plot_alignment(alignment, os.path.join(plot_dir, 'step-{}-align.png'.format(step)),
@@ -322,4 +320,4 @@ def train(args, log_dir, input_path, params):
 def tacotron_train(args, log_dir, hparams):
     input_path = os.path.join(args.base_dir, 'training_data', 'train.txt')
 
-    return train(args, log_dir, input_path, params)
+    return train(args, log_dir, input_path, hparams)

@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 
 # Default hyperparameters
@@ -19,7 +18,7 @@ hparams = tf.contrib.training.HParams(
 
     # Use LWS (https://github.com/Jonathan-LeRoux/lws) for STFT and phase reconstruction
     # It's preferred to set True to use with https://github.com/r9y9/wavenet_vocoder
-    # Does not work if n_ffit is not multiple of hop_size!!
+    # Does not work if n_fft is not multiple of hop_size!!
     use_lws=False,
     silence_threshold=2,  # silence threshold used for sound trimming for wavenet preprocessing
 
@@ -206,7 +205,7 @@ hparams = tf.contrib.training.HParams(
 
     wavenet_lr_schedule='exponential',  # learning rate schedule. Can be ('exponential', 'noam')
     wavenet_learning_rate=1e-4,  # wavenet initial learning rate
-    wavenet_warmup=float(4000),  # Only used with 'noam' scheme. Defines the number of ascending learning rate steps.
+    wavenet_warmup=4000.,  # Only used with 'noam' scheme. Defines the number of ascending learning rate steps.
     wavenet_decay_rate=0.5,  # Only used with 'exponential' scheme. Defines the decay rate.
     wavenet_decay_steps=300000,  # Only used with 'exponential' scheme. Defines the decay steps.
 

@@ -10,7 +10,7 @@ from wavernn.train import _bits
 def get_files(path, extension='.npy'):
     filenames = []
     for filename in glob.iglob(f'{path}/**/*{extension}', recursive=True):
-        filenames += [filename]
+        filenames.append(filename)
     return sorted(filenames)
 
 
@@ -44,12 +44,10 @@ def preprocess(args, audio_dir, taco_dir, hparams):
 
         assert(mels_id == audio_id)
 
-        dataset_ids += [audio_id]
+        dataset_ids.append(audio_id)
 
-        x = convert_gta_audio(path[0])
-        m = convert_gta_mels(path[1])
-        np.save(f'{quant_dir}/{audio_id}.npy', x)
-        np.save(f'{mels_dir}/{mels_id}.npy', m)
+        np.save(f'{quant_dir}/{audio_id}.npy', convert_gta_audio(path[0]))
+        np.save(f'{mels_dir}/{mels_id}.npy', convert_gta_mels(path[1]))
 
         log('%i/%i : audio: %s mel: %s' % (i + 1, len(audio_files), audio_id, mels_id))
 

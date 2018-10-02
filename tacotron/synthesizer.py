@@ -81,7 +81,7 @@ class Synthesizer:
         if basenames is None:
             # Generate wav and read it
             wav = audio.inv_mel_spectrogram(mels.T, hparams)
-            audio.save_wav(wav, 'temp.wav', sr=hparams.sample_rate)  # Find a better way
+            audio.save_wav(wav, 'temp.wav', hparams.sample_rate)  # Find a better way
 
             chunk = 512
             f = wave.open('temp.wav', 'rb')
@@ -122,7 +122,7 @@ class Synthesizer:
             if log_dir is not None:
                 # save wav (mel -> wav)
                 wav = audio.inv_mel_spectrogram(mel.T, hparams)
-                audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-mel.wav'.format(basenames[i])), sr=hparams.sample_rate)
+                audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-mel.wav'.format(basenames[i])), hparams.sample_rate)
 
                 # save alignments
                 plot.plot_alignment(alignments[i], os.path.join(log_dir, 'plots/alignment-{}.png'.format(basenames[i])),
@@ -135,7 +135,7 @@ class Synthesizer:
                 if hparams.predict_linear:
                     # save wav (linear -> wav)
                     wav = audio.inv_linear_spectrogram(linears[i].T, hparams)
-                    audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-linear.wav'.format(basenames[i])), sr=hparams.sample_rate)
+                    audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-linear.wav'.format(basenames[i])), hparams.sample_rate)
 
                     # save mel spectrogram plot
                     plot.plot_spectrogram(linears[i], os.path.join(log_dir, 'plots/linear-{}.png'.format(basenames[i])),

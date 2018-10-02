@@ -141,12 +141,12 @@ class Model(nn.Module):
 
     def generate(self, mels, save_path, sr):
         self.eval()
+
         output = []
         rnn1 = self.get_gru_cell(self.rnn1)
         rnn2 = self.get_gru_cell(self.rnn2)
 
         with torch.no_grad():
-            start = time.time()
             x = torch.zeros(1, 1).to(device)
             h1 = torch.zeros(1, self.rnn_dims).to(device)
             h2 = torch.zeros(1, self.rnn_dims).to(device)
@@ -192,13 +192,11 @@ class Model(nn.Module):
 
                 x = torch.FloatTensor([[sample]]).to(device)
 
-                if i % 100 == 0:
-                    speed = int((i + 1) / (time.time() - start))
-                    log('%i/%i -- Speed: %i samples/sec' % (i + 1, seq_len, speed))
-
         output = torch.stack(output).cpu().numpy()
         save_wavernn_wav(output, save_path, sr)
+
         self.train()
+
         return output
 
     def get_gru_cell(self, gru):

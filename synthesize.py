@@ -15,7 +15,7 @@ def prepare_run(args):
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
     taco_checkpoint = os.path.join(args.base_dir, 'logs-' + args.model, 'taco_pretrained')
-    wave_checkpoint = os.path.join(args.base_dir, 'logs-' + args.model, 'wavernn_pretrained')
+    wave_checkpoint = os.path.join(args.base_dir, 'logs-' + args.model, 'wavernn_pretrained', 'wavernn_model.pyt')
 
     return taco_checkpoint, wave_checkpoint, modified_hp
 

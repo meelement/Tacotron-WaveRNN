@@ -62,7 +62,7 @@ def _process_utterance(mel_dir, linear_dir, wav_dir, index, wav_path, text, hpar
     """
     try:
         # Load the audio as numpy array
-        wav = audio.load_wav(wav_path, sr=hparams.sample_rate)
+        wav = audio.load_wav(wav_path, hparams.sample_rate)
     except FileNotFoundError:  # catch missing wav exception
         print('file {} present in csv metadata is not present in wav folder. skipping!'.format(
             wav_path))

@@ -111,7 +111,7 @@ def main():
     parser.add_argument('--checkpoint_interval', type=int, default=5000, help='Steps between writing checkpoints')
     parser.add_argument('--eval_interval', type=int, default=10000, help='Steps between eval on test data')
     parser.add_argument('--tacotron_train_steps', type=int, default=100000, help='total number of tacotron training steps')
-    parser.add_argument('--wavernn_train_epochs', type=int, default=500, help='total number of wavenet training epochs')
+    parser.add_argument('--wavernn_train_epochs', type=int, default=300, help='total number of wavenet training epochs')
     parser.add_argument('--text_list', default='', help='Text file contains list of texts to be synthesized. Valid if mode=eval')
     parser.add_argument('--slack_url', default=None, help='slack webhook notification destination link')
     args = parser.parse_args()
