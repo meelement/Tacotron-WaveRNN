@@ -135,10 +135,6 @@ class Model(nn.Module):
         x = F.relu(self.fc2(x))
         return F.log_softmax(self.fc3(x), dim=-1)
 
-    def preview_upsampling(self, mels):
-        mels, aux = self.upsample(mels)
-        return mels, aux
-
     def generate(self, mels, save_path, sr):
         self.eval()
 
