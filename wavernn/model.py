@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from datasets.audio import save_wavernn_wav
 from infolog import log
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -109,33 +108,30 @@ class Model(nn.Module):
         bsize = x.size(0)
         h1 = torch.zeros(1, bsize, self.rnn_dims).to(device)
         h2 = torch.zeros(1, bsize, self.rnn_dims).to(device)
+
         mels, aux = self.upsample(mels)
+        aux = [aux[:, :, self.aux_dims * i:self.aux_dims * (i + 1)] for i in range(4)]
 
-        aux_idx = [self.aux_dims * i for i in range(5)]
-        a1 = aux[:, :, aux_idx[0]:aux_idx[1]]
-        a2 = aux[:, :, aux_idx[1]:aux_idx[2]]
-        a3 = aux[:, :, aux_idx[2]:aux_idx[3]]
-        a4 = aux[:, :, aux_idx[3]:aux_idx[4]]
-
-        x = torch.cat([x.unsqueeze(-1), mels, a1], dim=2)
+        x = torch.cat([x.unsqueeze(-1), mels, aux[0]], dim=2)
         x = self.I(x)
         res = x
         x, _ = self.rnn1(x, h1)
 
         x = x + res
         res = x
-        x = torch.cat([x, a2], dim=2)
+        x = torch.cat([x, aux[1]], dim=2)
         x, _ = self.rnn2(x, h2)
 
         x = x + res
-        x = torch.cat([x, a3], dim=2)
+        x = torch.cat([x, aux[2]], dim=2)
         x = F.relu(self.fc1(x))
 
-        x = torch.cat([x, a4], dim=2)
+        x = torch.cat([x, aux[3]], dim=2)
         x = F.relu(self.fc2(x))
+
         return F.log_softmax(self.fc3(x), dim=-1)
 
-    def generate(self, mels, save_path, sr):
+    def generate(self, mels):
         self.eval()
 
         output = []
@@ -149,51 +145,34 @@ class Model(nn.Module):
 
             mels = torch.FloatTensor(mels).to(device).unsqueeze(0)
             mels, aux = self.upsample(mels)
-
-            aux_idx = [self.aux_dims * i for i in range(5)]
-            a1 = aux[:, :, aux_idx[0]:aux_idx[1]]
-            a2 = aux[:, :, aux_idx[1]:aux_idx[2]]
-            a3 = aux[:, :, aux_idx[2]:aux_idx[3]]
-            a4 = aux[:, :, aux_idx[3]:aux_idx[4]]
+            aux = [aux[:, :, self.aux_dims * i:self.aux_dims * (i + 1)] for i in range(4)]
 
             seq_len = mels.size(1)
-
             for i in range(seq_len):
-                m_t = mels[:, i, :]
-                a1_t = a1[:, i, :]
-                a2_t = a2[:, i, :]
-                a3_t = a3[:, i, :]
-                a4_t = a4[:, i, :]
-
-                x = torch.cat([x, m_t, a1_t], dim=1)
+                x = torch.cat([x, mels[:, i, :], aux[0][:, i, :]], dim=1)
                 x = self.I(x)
                 h1 = rnn1(x, h1)
 
                 x = x + h1
-                inp = torch.cat([x, a2_t], dim=1)
+                inp = torch.cat([x, aux[1][:, i, :]], dim=1)
                 h2 = rnn2(inp, h2)
 
                 x = x + h2
-                x = torch.cat([x, a3_t], dim=1)
+                x = torch.cat([x, aux[2][:, i, :]], dim=1)
                 x = F.relu(self.fc1(x))
 
-                x = torch.cat([x, a4_t], dim=1)
-                x = F.relu(self.fc2(x))
-                x = self.fc3(x)
+                x = torch.cat([x, aux[3][:, i, :]], dim=1)
+                x = self.fc3(F.relu(self.fc2(x)))
 
                 posterior = F.softmax(x, dim=1).view(-1)
                 distrib = torch.distributions.Categorical(posterior)
                 sample = 2 * distrib.sample().float() / (self.n_classes - 1.) - 1.
-                output.append(sample)
 
+                output.append(sample)
                 x = torch.FloatTensor([[sample]]).to(device)
 
-        output = torch.stack(output).cpu().numpy()
-        save_wavernn_wav(output, save_path, sr)
-
         self.train()
-
-        return output
+        return torch.stack(output).cpu().numpy()
 
     def get_gru_cell(self, gru):
         gru_cell = nn.GRUCell(gru.input_size, gru.hidden_size)

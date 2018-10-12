@@ -61,7 +61,7 @@ def test_generate(model, step, input_dir, ouput_dir, sr, samples=3):
     filenames = [f for f in sorted(os.listdir(input_dir)) if f.endswith('.npy')]
     for i in tqdm(range(samples)):
         mel = np.load(os.path.join(input_dir, filenames[i])).T
-        model.generate(mel, f'{ouput_dir}/{step // 1000}k_steps_{i}.wav', sr)
+        save_wavernn_wav(model.generate(mel), f'{ouput_dir}/{step // 1000}k_steps_{i}.wav', sr)
 
 
 def train(args, log_dir, input_dir, hparams):
